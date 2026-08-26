@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MustafaAydoğan</title>
+<meta name="description" content="Bu cumartesi saat 18:30'a ne kadar kaldığını gösteren canlı geri sayım.">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0b1020;
+    --bg-glow: #1b2a5e;
+    --text: #f2f5ff;
+    --accent: #5b8cff;
+  }
+
+  body {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1rem;
+    background: radial-gradient(circle at 50% 0%, var(--bg-glow), var(--bg) 60%);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    text-align: center;
+  }
+
+  .clock {
+    /* 8 karakterlik "75:12:34" dar ekranda da taşmasın diye vw ile ölçekleniyor. */
+    font-size: clamp(2.3rem, 15vw, 8.5rem);
+    font-weight: 700;
+    line-height: 1.05;
+    letter-spacing: 0.08em;
+    /* Rakamlar eşit genişlikte olsun ki her saniye sayaç oynamasın. */
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+    background: linear-gradient(180deg, #ffffff, var(--accent));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Hedef ana gelindiğinde sayaç gizlenir, yerine kutlama mesajı çıkar. */
+  body.arrived .clock { display: none; }
+  .arrived-message { display: none; font-size: clamp(2.5rem, 11vw, 5rem); font-weight: 700; }
+  body.arrived .arrived-message { display: block; }
+</style>
+</head>
+<body>
+
+  <p class="clock" id="clock">--:--:--</p>
+  <p class="arrived-message">Vakit geldi! 🎉</p>
+
+<script>
+  const TIME_ZONE = "Europe/Istanbul";
+  const TARGET_WEEKDAY = 6; // 0 = Pazar, 6 = Cumartesi
+  const TARGET_HOUR = 18;
+  const TARGET_MINUTE = 30;
+  // Hedef anı geçtikten sonra sayaç hemen gelecek haftaya atlamasın, bir saat
+  // boyunca "Vakit geldi!" yazsın.
+  const CELEBRATION_MS = 60 * 60 * 1000;
+
+  // Siteye kim nereden bakarsa baksın geri sayım Türkiye saatine göre çalışsın
+  // diye, verilen anın Istanbul'daki UTC farkını hesaplıyoruz.
+  function timeZoneOffsetMs(date) {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: TIME_ZONE, hour12: false,
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit"
+    });
+    const parts = {};
+    for (const part of formatter.formatToParts(date)) {
+      parts[part.type] = Number(part.value);
+    }
+    const wallClockAsUtc = Date.UTC(
+      parts.year, parts.month - 1, parts.day,
+      parts.hour % 24, parts.minute, parts.second
+    );
+    return wallClockAsUtc - Math.floor(date.getTime() / 1000) * 1000;
+  }
+
+  function nextTargetTime(now) {
+    const offset = timeZoneOffsetMs(now);
+    // UTC alanlarından okunduğunda Istanbul'un duvar saatini veren tarih.
+    const wallClock = new Date(now.getTime() + offset);
+    const daysUntilSaturday = (TARGET_WEEKDAY - wallClock.getUTCDay() + 7) % 7;
+
+    function saturdayAt(extraDays) {
+      const wallClockTarget = Date.UTC(
+        wallClock.getUTCFullYear(),
+        wallClock.getUTCMonth(),
+        wallClock.getUTCDate() + daysUntilSaturday + extraDays,
+        TARGET_HOUR, TARGET_MINUTE, 0
+      );
+      // Hedef gününün kendi UTC farkıyla düzeltiyoruz, ileride yaz saati
+      // uygulaması geri gelirse hesap kaymasın diye.
+      const approximate = wallClockTarget - offset;
+      return wallClockTarget - timeZoneOffsetMs(new Date(approximate));
+    }
+
+    const thisSaturday = saturdayAt(0);
+    // Kutlama süresi de dolduysa sayaç kendiliğinden gelecek haftaya kayar.
+    return thisSaturday + CELEBRATION_MS > now.getTime() ? thisSaturday : saturdayAt(7);
+  }
+
+  function pad(value) {
+    return String(value).padStart(2, "0");
+  }
+
+  function render() {
+    const now = new Date();
+    const remainingMs = nextTargetTime(now) - now.getTime();
+
+    if (remainingMs <= 0) {
+      document.body.classList.add("arrived");
+      return;
+    }
+    document.body.classList.remove("arrived");
+
+    const totalSeconds = Math.floor(remainingMs / 1000);
+    // Gün ayrı gösterilmiyor; kalan süre toplam saat olarak yazılıyor, ör. 75:12:34.
+    const totalHours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    const text = pad(totalHours) + ":" + pad(minutes) + ":" + pad(seconds);
+
+    document.getElementById("clock").textContent = text;
+  }
+
+  render();
+  setInterval(render, 1000);
+</script>
+
+</body>
+</html>
